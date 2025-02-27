@@ -442,28 +442,23 @@ global.serve = async (PORT) => {
 		if (global["jwt-auth"]) {
 			let token = null;
 			
+			// クエリパラメータからトークンを取得（URL解析を使用せず、単純な文字列操作）
 			try {
-				// URLからトークンを取得（安全に解析）
-				let urlPath = req.url || '/';
-				if (!urlPath.startsWith('/')) {
-					urlPath = '/' + urlPath;
+				if (req.url) {
+					// URLクエリパラメータを手動で解析
+					const queryPos = req.url.indexOf('?');
+					if (queryPos !== -1) {
+						const queryString = req.url.slice(queryPos + 1);
+						const params = new URLSearchParams(queryString);
+						token = params.get('token');
+					}
 				}
-				
-				const host = req.headers.host || 'localhost';
-				const baseUrl = `http://${host}`;
-				const url = new URL(urlPath, baseUrl);
-				
-				// クエリパラメータからトークンを取得
-				token = url.searchParams.get('token');
-				
-				// ヘッダーからトークンを取得（バックアップ）
-				if (!token) {
-					const authHeader = req.headers.authorization;
-					token = authHeader ? authHeader.replace('Bearer ', '') : null;
-				}
-			} catch (error) {
-				console.error('URL解析エラー:', error, req.url);
-				// 無効なURL形式の場合でもヘッダーから認証を試みる
+			} catch (e) {
+				console.error('クエリ解析エラー:', e, req.url);
+			}
+			
+			// ヘッダーからトークンを取得（バックアップ）
+			if (!token) {
 				const authHeader = req.headers.authorization;
 				token = authHeader ? authHeader.replace('Bearer ', '') : null;
 			}
