@@ -129,6 +129,13 @@ class PeerStream extends HTMLVideoElement {
 
 		// this.setupPeerConnection();
 	}
+	
+	// トークンを取得するメソッド
+	getAuthToken() {
+		// data-token属性からトークンを取得
+		return this.dataset.token || '';
+	}
+	
 	checkWebRTCSupport() {
 		// Step 2: Check for RTCPeerConnection
 		const RTCPeerConnection = window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
@@ -183,10 +190,16 @@ class PeerStream extends HTMLVideoElement {
 			this.play();
 			return;
 		}
+		
+		// WebSocketの接続URLを構築（トークンをクエリパラメータとして追加）
+		const token = this.getAuthToken();
+		const baseUrl = this.id || location.href.replace(/^http/, "ws");
+		const wsUrl = token ? `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}token=${token}` : baseUrl;
+		
 		// await new Promise((res) => setTimeout(res, 1000));
 		this.ws.onclose = null
 		this.ws.close(1000);
-		this.ws = new WebSocket(this.id || location.href.replace(/^http/, "ws"), 'peer-stream');
+		this.ws = new WebSocket(wsUrl, 'peer-stream');
 
 		this.ws.onerror
 
@@ -931,8 +944,9 @@ class PeerStream extends HTMLVideoElement {
 			};
 		}
 	}
-
-
 }
+
+// この要素が監視する属性を定義（data-token属性の変更を検知するため）
+PeerStream.observedAttributes = ['data-token', 'id'];
 
 customElements.define("peer-stream", PeerStream, { extends: "video" });
