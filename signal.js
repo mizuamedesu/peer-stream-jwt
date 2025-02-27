@@ -449,80 +449,83 @@ global.serve = async (PORT) => {
             });
     });
 
-    HTTP.on("upgrade", (req, socket, head) => {
-        // リモートIPを取得
-        const remoteIp = getIPv4(req.socket.remoteAddress);
-
-        // サーバ自身のIP以外の場合のみ認証処理を実施
-        if (remoteIp !== global.address) {
-            if (global["jwt-auth"]) {
-                let token = null;
-                // URLクエリパラメータからトークンを取得
-                try {
-                    if (req.url) {
-                        const queryPos = req.url.indexOf('?');
-                        if (queryPos !== -1) {
-                            const queryString = req.url.slice(queryPos + 1);
-                            const params = new URLSearchParams(queryString);
-                            token = params.get('token');
-                        }
-                    }
-                } catch (e) {
-                    console.error('クエリ解析エラー:', e, req.url);
-                }
-                // ヘッダーからも取得（バックアップ）
-                if (!token) {
-                    const authHeader = req.headers.authorization;
-                    token = authHeader ? authHeader.replace('Bearer ', '') : null;
-                }
-                console.log(`[${new Date().toISOString()}] WS接続リクエスト: ${req.url}`);
-                console.log(`[WS-JWT] プロトコル: ${req.headers["sec-websocket-protocol"]}`);
-                console.log(`[WS-JWT] トークン: ${token ? token.substring(0, 20) + '...' : 'なし'}`);
-                if (!token) {
-                    console.log('[WS-JWT] エラー: トークンがありません');
-                    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                    socket.destroy();
-                    return;
-                }
-                try {
-                    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-                    req.user = decoded;
-                    console.log(`[WS-JWT] 認証成功: ユーザー ${JSON.stringify(decoded)}`);
-                } catch (error) {
-                    console.error(`[WS-JWT] 認証エラー: ${error.message}`);
-                    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                    socket.destroy();
-                    return;
-                }
-            } else if (global.auth) {
-                // Basic認証の処理
-                let auth = req.headers.authorization?.replace("Basic ", "");
-                auth = Buffer.from(auth || "", "base64").toString("utf-8");
-                if (global.auth !== auth) {
-                    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                    socket.destroy();
-                    return;
-                }
-            }
-        } else {
-            console.log(`[WS Auth Bypass] 自身のIP (${remoteIp}) からのリクエストなので認証をスキップ`);
-        }
-
-        // WS子プロトコルに応じたアップグレード処理
-        if (req.headers["sec-websocket-protocol"] === "peer-stream") {
-            PLAYER.handleUpgrade(req, socket, head, (fe) => {
-                PLAYER.emit("connection", fe, req);
-            });
-        } else if (req.headers["sec-websocket-protocol"] === "exec-ue") {
-            EXECUE.handleUpgrade(req, socket, head, (fe) => {
-                EXECUE.emit("connection", fe, req);
-            });
-        } else {
-            ENGINE.handleUpgrade(req, socket, head, (fe) => {
-                ENGINE.emit("connection", fe, req);
-            });
-        }
-    });
+	HTTP.on("upgrade", (req, socket, head) => {
+		// リモートIPを取得
+		let remoteIp = getIPv4(req.socket.remoteAddress);
+		console.log(`[DEBUG] global.address: ${global.address}`);
+		console.log(`[DEBUG] remoteIp: ${remoteIp}`);
+	
+		// バイパス対象のIPを配列で指定（必要に応じて追加してください）
+		const bypassIPs = [global.address, "127.0.0.1", "::1"];
+	
+		// サーバ自身のIPまたはローカルホストの場合、認証をバイパス
+		if (!bypassIPs.includes(remoteIp)) {
+			if (global["jwt-auth"]) {
+				let token = null;
+				try {
+					if (req.url) {
+						const queryPos = req.url.indexOf('?');
+						if (queryPos !== -1) {
+							const queryString = req.url.slice(queryPos + 1);
+							const params = new URLSearchParams(queryString);
+							token = params.get('token');
+						}
+					}
+				} catch (e) {
+					console.error('クエリ解析エラー:', e, req.url);
+				}
+				if (!token) {
+					const authHeader = req.headers.authorization;
+					token = authHeader ? authHeader.replace('Bearer ', '') : null;
+				}
+				console.log(`[${new Date().toISOString()}] WS接続リクエスト: ${req.url}`);
+				console.log(`[WS-JWT] プロトコル: ${req.headers["sec-websocket-protocol"]}`);
+				console.log(`[WS-JWT] トークン: ${token ? token.substring(0, 20) + '...' : 'なし'}`);
+				if (!token) {
+					console.log('[WS-JWT] エラー: トークンがありません');
+					socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+					socket.destroy();
+					return;
+				}
+				try {
+					const decoded = jwt.verify(token, process.env.JWT_SECRET);
+					req.user = decoded;
+					console.log(`[WS-JWT] 認証成功: ユーザー ${JSON.stringify(decoded)}`);
+				} catch (error) {
+					console.error(`[WS-JWT] 認証エラー: ${error.message}`);
+					socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+					socket.destroy();
+					return;
+				}
+			} else if (global.auth) {
+				let auth = req.headers.authorization?.replace("Basic ", "");
+				auth = Buffer.from(auth || "", "base64").toString("utf-8");
+				if (global.auth !== auth) {
+					socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+					socket.destroy();
+					return;
+				}
+			}
+		} else {
+			console.log(`[WS Auth Bypass] 自身のIP (${remoteIp}) からのリクエストなので認証をスキップ`);
+		}
+	
+		// WS子プロトコルに応じたアップグレード処理
+		if (req.headers["sec-websocket-protocol"] === "peer-stream") {
+			PLAYER.handleUpgrade(req, socket, head, (fe) => {
+				PLAYER.emit("connection", fe, req);
+			});
+		} else if (req.headers["sec-websocket-protocol"] === "exec-ue") {
+			EXECUE.handleUpgrade(req, socket, head, (fe) => {
+				EXECUE.emit("connection", fe, req);
+			});
+		} else {
+			ENGINE.handleUpgrade(req, socket, head, (fe) => {
+				ENGINE.emit("connection", fe, req);
+			});
+		}
+	});
+	
 
     return new Promise((res, rej) => {
         HTTP.listen(PORT ?? 88, res);
