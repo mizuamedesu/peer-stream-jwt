@@ -1,5 +1,6 @@
 "5.1.3";
 
+// JWT認証用に必要なパッケージをインストールしてください
 // npm install jsonwebtoken dotenv
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
@@ -437,6 +438,47 @@ global.serve = async (PORT) => {
 	});
 
 	HTTP.on("upgrade", (req, socket, head) => {
+		// JWT認証チェック
+		if (global["jwt-auth"]) {
+			// URLクエリパラメータからトークンを取得
+			const url = new URL(req.url, `http://${req.headers.host}`);
+			const tokenFromQuery = url.searchParams.get('token');
+			
+			// ヘッダーからトークンを取得
+			const authHeader = req.headers.authorization;
+			const tokenFromHeader = authHeader ? authHeader.replace('Bearer ', '') : null;
+			
+			// いずれかの方法でトークンを取得
+			const token = tokenFromHeader || tokenFromQuery;
+			
+			if (!token) {
+				// 認証トークンがない場合は接続を拒否
+				socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+				socket.destroy();
+				return;
+			}
+			
+			try {
+				// トークンを検証
+				const decoded = jwt.verify(token, process.env.JWT_SECRET);
+				req.user = decoded;
+			} catch (error) {
+				// トークンが無効な場合は接続を拒否
+				socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+				socket.destroy();
+				return;
+			}
+		} else if (global.auth) {
+			// 既存のBasic認証処理（WebSocketには実装されていなかったので追加）
+			let auth = req.headers.authorization?.replace("Basic ", "");
+			auth = Buffer.from(auth || "", "base64").toString("utf-8");
+			if (global.auth !== auth) {
+				socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+				socket.destroy();
+				return;
+			}
+		}
+		
 		// WS子协议
 		if (req.headers["sec-websocket-protocol"] === "peer-stream") {
 			PLAYER.handleUpgrade(req, socket, head, (fe) => {
