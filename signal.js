@@ -244,7 +244,12 @@ const path = require("path");
 function verifyJWT(req, res) {
     const token = req.headers.authorization?.replace('Bearer ', '');
     
+    // デバッグ情報を追加
+    console.log(`[${new Date().toISOString()}] JWT認証リクエスト: ${req.method} ${req.url}`);
+    console.log(`[JWT] トークン: ${token ? token.substring(0, 20) + '...' : 'なし'}`);
+    
     if (!token) {
+        console.log('[JWT] エラー: トークンがありません');
         res.writeHead(401);
         res.end('JWT token required');
         return false;
@@ -253,8 +258,10 @@ function verifyJWT(req, res) {
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = decoded;
+        console.log(`[JWT] 認証成功: ユーザー ${JSON.stringify(decoded)}`);
         return true;
     } catch (error) {
+        console.log(`[JWT] 認証エラー: ${error.message}`);
         res.writeHead(401);
         res.end('Invalid JWT token');
         return false;
@@ -463,8 +470,14 @@ global.serve = async (PORT) => {
 				token = authHeader ? authHeader.replace('Bearer ', '') : null;
 			}
 			
+			// デバッグ情報追加
+			console.log(`[${new Date().toISOString()}] WS接続リクエスト: ${req.url}`);
+			console.log(`[WS-JWT] プロトコル: ${req.headers["sec-websocket-protocol"]}`);
+			console.log(`[WS-JWT] トークン: ${token ? token.substring(0, 20) + '...' : 'なし'}`);
+			
 			if (!token) {
 				// 認証トークンがない場合は接続を拒否
+				console.log('[WS-JWT] エラー: トークンがありません');
 				socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
 				socket.destroy();
 				return;
@@ -474,9 +487,10 @@ global.serve = async (PORT) => {
 				// トークンを検証
 				const decoded = jwt.verify(token, process.env.JWT_SECRET);
 				req.user = decoded;
+				console.log(`[WS-JWT] 認証成功: ユーザー ${JSON.stringify(decoded)}`);
 			} catch (error) {
 				// トークンが無効な場合は接続を拒否
-				console.error('JWT検証エラー:', error);
+				console.error(`[WS-JWT] 認証エラー: ${error.message}`);
 				socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
 				socket.destroy();
 				return;
