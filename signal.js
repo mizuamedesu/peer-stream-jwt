@@ -440,16 +440,33 @@ global.serve = async (PORT) => {
 	HTTP.on("upgrade", (req, socket, head) => {
 		// JWT認証チェック
 		if (global["jwt-auth"]) {
-			// URLクエリパラメータからトークンを取得
-			const url = new URL(req.url, `http://${req.headers.host}`);
-			const tokenFromQuery = url.searchParams.get('token');
+			let token = null;
 			
-			// ヘッダーからトークンを取得
-			const authHeader = req.headers.authorization;
-			const tokenFromHeader = authHeader ? authHeader.replace('Bearer ', '') : null;
-			
-			// いずれかの方法でトークンを取得
-			const token = tokenFromHeader || tokenFromQuery;
+			try {
+				// URLからトークンを取得（安全に解析）
+				let urlPath = req.url || '/';
+				if (!urlPath.startsWith('/')) {
+					urlPath = '/' + urlPath;
+				}
+				
+				const host = req.headers.host || 'localhost';
+				const baseUrl = `http://${host}`;
+				const url = new URL(urlPath, baseUrl);
+				
+				// クエリパラメータからトークンを取得
+				token = url.searchParams.get('token');
+				
+				// ヘッダーからトークンを取得（バックアップ）
+				if (!token) {
+					const authHeader = req.headers.authorization;
+					token = authHeader ? authHeader.replace('Bearer ', '') : null;
+				}
+			} catch (error) {
+				console.error('URL解析エラー:', error, req.url);
+				// 無効なURL形式の場合でもヘッダーから認証を試みる
+				const authHeader = req.headers.authorization;
+				token = authHeader ? authHeader.replace('Bearer ', '') : null;
+			}
 			
 			if (!token) {
 				// 認証トークンがない場合は接続を拒否
@@ -464,12 +481,13 @@ global.serve = async (PORT) => {
 				req.user = decoded;
 			} catch (error) {
 				// トークンが無効な場合は接続を拒否
+				console.error('JWT検証エラー:', error);
 				socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
 				socket.destroy();
 				return;
 			}
 		} else if (global.auth) {
-			// 既存のBasic認証処理（WebSocketには実装されていなかったので追加）
+			// 既存のBasic認証処理
 			let auth = req.headers.authorization?.replace("Basic ", "");
 			auth = Buffer.from(auth || "", "base64").toString("utf-8");
 			if (global.auth !== auth) {
