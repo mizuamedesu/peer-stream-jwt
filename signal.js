@@ -454,12 +454,20 @@ global.serve = async (PORT) => {
 		let remoteIp = getIPv4(req.socket.remoteAddress);
 		console.log(`[DEBUG] global.address: ${global.address}`);
 		console.log(`[DEBUG] remoteIp: ${remoteIp}`);
+		console.log(`[DEBUG] Protocol: ${req.headers["sec-websocket-protocol"]}`);
 	
-		// バイパス対象のIPを配列で指定（必要に応じて追加してください）
+		// バイパス対象のIPを配列で指定
 		const bypassIPs = [global.address, "127.0.0.1", "::1"];
-	
-		// サーバ自身のIPまたはローカルホストの場合、認証をバイパス
-		if (!bypassIPs.includes(remoteIp)) {
+		
+		// プロトコルの確認
+		const protocol = req.headers["sec-websocket-protocol"];
+		const isUnrealConnection = protocol !== "peer-stream" && protocol !== "exec-ue";
+		
+		// バイパス条件: Unrealの接続（プロトコルなし）かつバイパス対象IPからの接続の場合のみ
+		const shouldBypass = isUnrealConnection && bypassIPs.includes(remoteIp);
+		
+		// 認証が必要な場合（バイパス条件を満たさない場合）
+		if (!shouldBypass) {
 			if (global["jwt-auth"]) {
 				let token = null;
 				try {
@@ -479,7 +487,7 @@ global.serve = async (PORT) => {
 					token = authHeader ? authHeader.replace('Bearer ', '') : null;
 				}
 				console.log(`[${new Date().toISOString()}] WS接続リクエスト: ${req.url}`);
-				console.log(`[WS-JWT] プロトコル: ${req.headers["sec-websocket-protocol"]}`);
+				console.log(`[WS-JWT] プロトコル: ${protocol}`);
 				console.log(`[WS-JWT] トークン: ${token ? token.substring(0, 20) + '...' : 'なし'}`);
 				if (!token) {
 					console.log('[WS-JWT] エラー: トークンがありません');
@@ -507,15 +515,15 @@ global.serve = async (PORT) => {
 				}
 			}
 		} else {
-			console.log(`[WS Auth Bypass] 自身のIP (${remoteIp}) からのリクエストなので認証をスキップ`);
+			console.log(`[WS Auth Bypass] Unrealエンジン接続かつ許可IPからのリクエスト (${remoteIp}) なので認証をスキップ`);
 		}
 	
 		// WS子プロトコルに応じたアップグレード処理
-		if (req.headers["sec-websocket-protocol"] === "peer-stream") {
+		if (protocol === "peer-stream") {
 			PLAYER.handleUpgrade(req, socket, head, (fe) => {
 				PLAYER.emit("connection", fe, req);
 			});
-		} else if (req.headers["sec-websocket-protocol"] === "exec-ue") {
+		} else if (protocol === "exec-ue") {
 			EXECUE.handleUpgrade(req, socket, head, (fe) => {
 				EXECUE.emit("connection", fe, req);
 			});
