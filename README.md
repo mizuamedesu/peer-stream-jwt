@@ -1,27 +1,42 @@
-# UE5 Pixel Streaming SDK 
+# UE5 Pixel Streaming wit JWT
 
-Compared to EpicGame's heavily-designed SDK for Pixel Streaming, peer-stream.js is a lightweight WebRTC library with 0 dependency, containing a frontend component (using WebComponents API), along with a signaling server (using NodeJS).
+https://github.com/inveta/peer-stream/tree/main
 
-- peer-stream.js: browser SDK for player
-- signal.js: node.js signaling server
-- signal.json: configure signal.js
-- signal.html: GUI for signal.js and example for peer-stream.js
+このリポジトリはpeer-streamをフォークし、JWT Authの機能を付け加えたものです。
+以下のものが変更、もしくは追加されています。
 
-## Demo
+- signal.html: 最低限のプレビュー機能を残し、JWTのテストを行えるように。
+- signal.js: JWTの機能を追加
+- peer-stream.js: JWT送信機能を追加
+- jwt-generator.html: JWTを生成する簡易ジェネレーター
+- signal.json: JWTの有効を切り替えられるフラグを追加
+- その他Nodeモジュールの削除、packeage.jsonの追加
 
-```s
-# install WebSocket
-npm install ws@8.5.0
 
-# start Signaling Server
+
+## 実行方法
+
+```
+# jsonwebtoken dotenv wsが必要です
+npm install i
+
+# Signaling Serverの開始
 node signal.js
 
-# start packaged UE5
+# UE5の通信のみ同IPからバイパスするようになっています
 start path/to/UE5.exe -PixelStreamingURL="ws://localhost:88"
 
-# visit webpage
-start http://localhost:88/signal.html
 ```
+
+## 環境変数のセットアップ
+
+.envを作成し、JWT_SECRETを渡してください。
+
+```.env
+JWT_SECRET=1234
+```
+
+
 
 ## signal.json
 
@@ -34,37 +49,8 @@ start http://localhost:88/signal.html
 | boot          | bool     | false   | node signal.js on system boot                                       |
 | exeUeCoolTime | number   | 60      | Time interval between starting the same UE instance again next time |
 | preload       | int      | 1       | Number of pre started UE instances                                  |
+|jwt-auth | bool | false | 追加したもの|
 
-### Load Balance
-
-`signal.js` accept multi UE5 & player connections, where each UE5 maps to multi-players with load-balancing. Turn `one2one` on to keep one-to-one mapping. Provide `UE5` to start UE5 automatically. All configs in `signal.json`.
-
-## Unreal Engine
-
-enable the plugin:
-
-```s
-Plugins > Built-In > Graphics > Pixel Streaming > Enabled
-Editor Preferences > Level Editor > Play > Additional Launch Parameters
-start path/to/UE5.exe -{key}={value}
-```
-
-common startup options:
-
-```s
- -PixelStreamingURL="ws://localhost:88"
- -RenderOffScreen
- -Unattended
- -GraphicsAdapter=0
- -ForceRes
- -ResX=1280
- -ResY=720
- -PixelStreamingWebRTCFps=30
- -Windowed
- -AudioMixer
- -AllowPixelStreamingCommands
- -PixelStreamingEncoderRateControl=VBR
-```
 
 ## peer-stream.js
 
@@ -72,50 +58,45 @@ HTML:
 
 ```html
 <script src="//localhost:88/peer-stream.js"></script>
-<video is="peer-stream" id="ws://127.0.0.1:88/"></video>
+<video is="peer-stream" id="ws://localhost:88" data-token="YOUR_JWT_TOKEN"></video>
 ```
 
-or JavaScript:
+data-tokenというパラメーターを使用し、JWTを渡します。
 
-```html
-<script type="module">
-import "//localhost:88/peer-stream.js";
-const ps = document.createElement("video", { is: "peer-stream" });
-ps.id = "ws://127.0.0.1:88/";
-document.body.append(ps);
-</script>
+## signal.js
+
+```
+	HTTP.on("upgrade", (req, socket, head) => {
+		// リモートIPを取得
+		let remoteIp = getIPv4(req.socket.remoteAddress);
+		console.log(`[DEBUG] global.address: ${global.address}`);
+		console.log(`[DEBUG] remoteIp: ${remoteIp}`);
+		console.log(`[DEBUG] Protocol: ${req.headers["sec-websocket-protocol"]}`);
+	
+		// バイパス対象のIPを配列で指定
+		const bypassIPs = [global.address, "127.0.0.1", "::1"];
+		
+		// プロトコルの確認
+		const protocol = req.headers["sec-websocket-protocol"];
+		const isUnrealConnection = protocol !== "peer-stream" && protocol !== "exec-ue";
+		
+		// バイパス条件: Unrealの接続（プロトコルなし）かつバイパス対象IPからの接続の場合のみ
+		const shouldBypass = isUnrealConnection && bypassIPs.includes(remoteIp);
 ```
 
-### Messages
-
-sending messages:
-
-```js
-// object will be JSON.stringify()
-ps.emitMessage(msg: string | object);
+WebSocketのアップグレードイベントの時に認証しています。自分と同じIPかつサブプロトコルが未定義(Unrealとの通信用に使用)の場合のみデフォルトでバイパスしています。
 ```
-
-receiving messages:
-
-```js
-ps.addEventListener("message", e => {
-    // JSON.parse(e.detail)
-});
+const bypassIPs = [global.address, "127.0.0.1", "::1"];
 ```
+変えたかったらここに加筆修正するとよいと思います。
 
-## Requirement
-
-- Google Chrome 90+
-- Unreal Engine 5.0.3
-- NodeJS 14+
-- npm/ws 8.0+
-
-## © MIT License
+## MIT License
 
 Copyright (c) 2020-2024 Inveta
+Copyright (c) 2025 mizuame
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

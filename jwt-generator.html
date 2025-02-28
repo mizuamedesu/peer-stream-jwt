@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JWT Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/10.5.27/jsrsasign-all-min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        textarea, input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        textarea {
+            min-height: 100px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            display: block;
+            margin: 20px auto;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .result {
+            margin-top: 20px;
+            background-color: #f9f9f9;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .token-result {
+            margin-top: 5px;
+            word-break: break-all;
+            font-family: monospace;
+        }
+        .decoded {
+            white-space: pre-wrap;
+            font-family: monospace;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .tab-container {
+            margin-top: 20px;
+        }
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+            border-radius: 4px 4px 0 0;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 10px 16px;
+            margin: 0;
+            transition: 0.3s;
+            font-size: 14px;
+            color: #333;
+        }
+        .tab button:hover {
+            background-color: #ddd;
+        }
+        .tab button.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .tabcontent {
+            display: none;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            animation: fadeEffect 1s;
+        }
+        @keyframes fadeEffect {
+            from {opacity: 0;}
+            to {opacity: 1;}
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>JWT Generator</h1>
+        
+        <div class="form-group">
+            <label for="algorithm">アルゴリズム:</label>
+            <select id="algorithm">
+                <option value="HS256">HS256 (HMAC with SHA-256)</option>
+                <option value="HS384">HS384 (HMAC with SHA-384)</option>
+                <option value="HS512">HS512 (HMAC with SHA-512)</option>
+                <option value="RS256">RS256 (RSA Signature with SHA-256)</option>
+                <option value="RS384">RS384 (RSA Signature with SHA-384)</option>
+                <option value="RS512">RS512 (RSA Signature with SHA-512)</option>
+            </select>
+        </div>
+        
+        <div class="tab">
+            <button class="tablinks active" onclick="openTab(event, 'header')">ヘッダー</button>
+            <button class="tablinks" onclick="openTab(event, 'payload')">ペイロード</button>
+            <button class="tablinks" onclick="openTab(event, 'secret')">シークレット/キー</button>
+        </div>
+        
+        <div id="header" class="tabcontent" style="display: block;">
+            <div class="form-group">
+                <label for="header">JWTヘッダー:</label>
+                <textarea id="header-textarea">{
+  "alg": "HS256",
+  "typ": "JWT"
+}</textarea>
+            </div>
+        </div>
+        
+        <div id="payload" class="tabcontent">
+            <div class="form-group">
+                <label for="payload">JWTペイロード:</label>
+                <textarea id="payload-textarea">{
+  "sub": "1234567890",
+  "name": "ユーザー名",
+  "iat": 1516239022,
+  "exp": 1516242622
+}</textarea>
+            </div>
+        </div>
+        
+        <div id="secret" class="tabcontent">
+            <div class="form-group">
+                <label for="secret-key">シークレットキー (HMAC) または秘密鍵 (RSA):</label>
+                <textarea id="secret-key">your-256-bit-secret</textarea>
+            </div>
+            <div id="rsa-key-container" style="display: none;">
+                <div class="form-group">
+                    <label for="public-key">公開鍵 (RSA検証用):</label>
+                    <textarea id="public-key"></textarea>
+                </div>
+                <button onclick="generateRSAKeys()">RSAキーペア生成</button>
+            </div>
+        </div>
+        
+        <button onclick="generateJWT()">JWTを生成</button>
+        
+        <div class="result">
+            <label for="jwt-result">生成されたJWT:</label>
+            <div class="token-result" id="jwt-result"></div>
+            
+            <div id="decoded-container" style="display: none; margin-top: 20px;">
+                <label>デコードされたJWT:</label>
+                <div id="decoded-header" class="decoded"></div>
+                <div id="decoded-payload" class="decoded"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+
+        // アルゴリズム変更時の処理
+        document.getElementById('algorithm').addEventListener('change', function() {
+            const algorithm = this.value;
+            const headerJson = JSON.parse(document.getElementById('header-textarea').value);
+            headerJson.alg = algorithm;
+            document.getElementById('header-textarea').value = JSON.stringify(headerJson, null, 2);
+            
+            // RSAアルゴリズムが選択された場合
+            if (algorithm.startsWith('RS')) {
+                document.getElementById('rsa-key-container').style.display = 'block';
+            } else {
+                document.getElementById('rsa-key-container').style.display = 'none';
+            }
+        });
+
+        // RSAキーペアの生成
+        function generateRSAKeys() {
+            const keyPair = KEYUTIL.generateKeypair("RSA", 2048);
+            const prvKey = KEYUTIL.getPEM(keyPair.prvKeyObj, "PKCS8PRV");
+            const pubKey = KEYUTIL.getPEM(keyPair.pubKeyObj);
+            
+            document.getElementById('secret-key').value = prvKey;
+            document.getElementById('public-key').value = pubKey;
+        }
+
+        // JWTの生成
+        function generateJWT() {
+            try {
+                const algorithm = document.getElementById('algorithm').value;
+                const headerStr = document.getElementById('header-textarea').value;
+                const payloadStr = document.getElementById('payload-textarea').value;
+                const secretKey = document.getElementById('secret-key').value;
+                
+                let header;
+                let payload;
+                
+                try {
+                    header = JSON.parse(headerStr);
+                } catch (e) {
+                    alert('ヘッダーのJSONが無効です: ' + e.message);
+                    return;
+                }
+                
+                try {
+                    payload = JSON.parse(payloadStr);
+                } catch (e) {
+                    alert('ペイロードのJSONが無効です: ' + e.message);
+                    return;
+                }
+                
+                let token;
+                
+                if (algorithm.startsWith('HS')) {
+                    // HMAC署名
+                    token = KJUR.jws.JWS.sign(algorithm, header, payload, secretKey);
+                } else if (algorithm.startsWith('RS')) {
+                    // RSA署名
+                    token = KJUR.jws.JWS.sign(algorithm, header, payload, secretKey);
+                }
+                
+                document.getElementById('jwt-result').textContent = token;
+                
+                // トークンのデコードと表示
+                const parts = token.split('.');
+                const decodedHeader = JSON.parse(atob(parts[0]));
+                const decodedPayload = JSON.parse(atob(parts[1]));
+                
+                document.getElementById('decoded-header').textContent = 'ヘッダー: ' + JSON.stringify(decodedHeader, null, 2);
+                document.getElementById('decoded-payload').textContent = 'ペイロード: ' + JSON.stringify(decodedPayload, null, 2);
+                document.getElementById('decoded-container').style.display = 'block';
+            } catch (error) {
+                alert('JWT生成エラー: ' + error.message);
+            }
+        }
+
+        // ページ読み込み時にexpirationを現在時刻+1時間に設定
+        window.onload = function() {
+            const now = Math.floor(Date.now() / 1000);
+            const oneHourLater = now + 3600;
+            
+            try {
+                const payload = JSON.parse(document.getElementById('payload-textarea').value);
+                payload.iat = now;
+                payload.exp = oneHourLater;
+                document.getElementById('payload-textarea').value = JSON.stringify(payload, null, 2);
+            } catch (e) {
+                console.error('初期ペイロードの更新エラー:', e);
+            }
+        };
+    </script>
+</body>
+</html>

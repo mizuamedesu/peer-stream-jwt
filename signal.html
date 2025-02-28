@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebRTC Streaming Client</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .container {
+      background-color: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      text-align: center;
+    }
+    .video-container {
+      width: 100%;
+      margin: 20px 0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      overflow: hidden;
+      background-color: #000;
+    }
+    video {
+      width: 100%;
+      display: block;
+    }
+    .controls {
+      margin: 20px 0;
+    }
+    input, button, select {
+      padding: 8px;
+      margin: 5px 0;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    input[type="text"] {
+      width: 100%;
+    }
+    button {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      cursor: pointer;
+      padding: 10px 15px;
+    }
+    button:hover {
+      background-color: #3367d6;
+    }
+    .status {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 4px;
+      background-color: #f8f9fa;
+      border-left: 4px solid #4285f4;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>WebRTC Streaming Client</h1>
+    
+    <div class="controls">
+      <div>
+        <label for="server-url">WebSocket Server URL:</label>
+        <input type="text" id="server-url" value="ws://localhost:88" placeholder="ws://localhost:88">
+      </div>
+      
+      <div>
+        <label for="jwt-token">JWT Token (Optional):</label>
+        <input type="text" id="jwt-token" placeholder="YOUR_JWT_TOKEN">
+      </div>
+      
+      <button id="connect-btn">Connect to Stream</button>
+      <button id="disconnect-btn" disabled>Disconnect</button>
+    </div>
+    
+    <div class="video-container">
+      <video id="stream-video" autoplay playsinline controls></video>
+    </div>
+    
+    <div class="status" id="status-msg">Ready to connect. Configure the server URL and optional JWT token above.</div>
+  </div>
+
+  <script>
+    // Load the peer-stream.js script from the specified location
+    function loadPeerStreamScript() {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'peer-stream.js';
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('Failed to load peer-stream.js'));
+        document.head.appendChild(script);
+      });
+    }
+
+    // Initialize after the DOM is loaded
+    document.addEventListener('DOMContentLoaded', async () => {
+      const serverUrlInput = document.getElementById('server-url');
+      const jwtTokenInput = document.getElementById('jwt-token');
+      const connectBtn = document.getElementById('connect-btn');
+      const disconnectBtn = document.getElementById('disconnect-btn');
+      const statusMsg = document.getElementById('status-msg');
+      
+      // Try to load the peer-stream.js script
+      try {
+        await loadPeerStreamScript();
+        statusMsg.textContent = 'peer-stream.js loaded successfully. Ready to connect.';
+      } catch (error) {
+        statusMsg.textContent = 'Error: Could not load peer-stream.js from localhost:88. Make sure the script is available.';
+        statusMsg.style.borderLeftColor = 'red';
+        connectBtn.disabled = true;
+        return;
+      }
+      
+      let currentStream = null;
+      
+      // Connect button handler
+      connectBtn.addEventListener('click', () => {
+        const serverUrl = serverUrlInput.value.trim();
+        const jwtToken = jwtTokenInput.value.trim();
+        
+        if (!serverUrl) {
+          statusMsg.textContent = 'Error: Please enter a WebSocket server URL.';
+          statusMsg.style.borderLeftColor = 'red';
+          return;
+        }
+        
+        // Remove any existing stream element
+        if (currentStream) {
+          currentStream.remove();
+        }
+        
+        // Create a new peer-stream video element
+        currentStream = document.createElement('video', { is: 'peer-stream' });
+        currentStream.id = serverUrl;
+        if (jwtToken) {
+          currentStream.setAttribute('data-token', jwtToken);
+        }
+        currentStream.autoplay = true;
+        currentStream.controls = true;
+        currentStream.playsinline = true;
+        
+        // Replace the existing video with our peer-stream element
+        const videoContainer = document.querySelector('.video-container');
+        videoContainer.innerHTML = '';
+        videoContainer.appendChild(currentStream);
+        
+        // Update UI
+        statusMsg.textContent = `Connecting to ${serverUrl}...`;
+        statusMsg.style.borderLeftColor = '#4285f4';
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+        
+        // Handle connection events
+        currentStream.addEventListener('connected', () => {
+          statusMsg.textContent = `Connected to ${serverUrl} successfully.`;
+          statusMsg.style.borderLeftColor = 'green';
+        });
+        
+        currentStream.addEventListener('error', (e) => {
+          statusMsg.textContent = `Error: ${e.detail || 'Failed to connect to the stream.'}`;
+          statusMsg.style.borderLeftColor = 'red';
+          connectBtn.disabled = false;
+        });
+      });
+      
+      // Disconnect button handler
+      disconnectBtn.addEventListener('click', () => {
+        if (currentStream) {
+          currentStream.remove();
+          currentStream = null;
+          
+          // Replace with a standard video element
+          const videoElement = document.createElement('video');
+          videoElement.id = 'stream-video';
+          videoElement.autoplay = true;
+          videoElement.playsinline = true;
+          videoElement.controls = true;
+          
+          const videoContainer = document.querySelector('.video-container');
+          videoContainer.innerHTML = '';
+          videoContainer.appendChild(videoElement);
+          
+          // Update UI
+          statusMsg.textContent = 'Disconnected from stream. Ready to connect again.';
+          statusMsg.style.borderLeftColor = '#4285f4';
+          connectBtn.disabled = false;
+          disconnectBtn.disabled = true;
+        }
+      });
+    });
+  </script>
+</body>
+</html>

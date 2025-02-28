@@ -1,7 +1,5 @@
 "5.1.3";
 
-// JWT認証用に必要なパッケージをインストールしてください
-// npm install jsonwebtoken dotenv
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
