@@ -912,3 +912,39 @@ global.killUE = async function (port) {
   });
 };
 
+function checkTokenExpirations() {
+    const now = new Date();
+    
+    PLAYER.clients.forEach(function each(ws) {
+        if (ws.tokenExpiration && now > ws.tokenExpiration) {
+            console.log(`[JWT] トークン期限切れによる接続切断: ${ws.req.socket.remoteAddress}:${ws.req.socket.remotePort}`);
+            ws.close(1000, "JWT token expired");
+            
+            if (ws.ue) {
+                ws.ue.send(
+                    JSON.stringify({
+                        type: "playerDisconnected",
+                        playerId: ws.req.socket.remotePort,
+                    })
+                );
+                ws.ue.fe.delete(ws);
+            }
+        }
+    });
+    
+    EXECUE.clients.forEach(function each(ws) {
+        if (ws.tokenExpiration && now > ws.tokenExpiration) {
+            console.log(`[JWT] トークン期限切れによる接続切断: ${ws.req.socket.remoteAddress}:${ws.req.socket.remotePort}`);
+            ws.close(1000, "JWT token expired");
+        }
+    });
+    
+    ENGINE.clients.forEach(function each(ws) {
+        if (ws.tokenExpiration && now > ws.tokenExpiration) {
+            console.log(`[JWT] トークン期限切れによる接続切断: ${ws.req.socket.remoteAddress}:${ws.req.socket.remotePort}`);
+            ws.close(1000, "JWT token expired");
+        }
+    });
+}
+// 現状1秒間隔でチェック回しているので、いい感じに
+setInterval(checkTokenExpirations, 1000);
